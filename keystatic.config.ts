@@ -1,4 +1,4 @@
-import { config, fields, collection } from "@keystatic/core";
+import { config, fields, collection, singleton } from "@keystatic/core";
 import type { Config } from "@markdoc/markdoc";
 
 export const markdocConfig: Config = {};
@@ -6,6 +6,31 @@ export const markdocConfig: Config = {};
 export default config({
   storage: {
     kind: "local",
+  },
+  singletons: {
+    siteSettings: singleton({
+      label: "Blog Settings",
+      path: "src/content/site-settings",
+      format: "json",
+      schema: {
+        title: fields.text({
+          label: "Blog Title",
+          defaultValue: "My Blog",
+          validation: { isRequired: true },
+        }),
+        tagline: fields.text({
+          label: "Tagline",
+          defaultValue: "Thoughts, notes, and stories.",
+          validation: { isRequired: true },
+        }),
+        metaDescription: fields.text({
+          label: "Meta Description",
+          defaultValue: "A personal blog for thoughts, notes, and stories.",
+          multiline: true,
+          validation: { isRequired: true },
+        }),
+      },
+    }),
   },
   collections: {
     posts: collection({

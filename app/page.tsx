@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { reader } from "./reader";
+import { getSiteSettings } from "./site-settings";
 
 export default async function Homepage() {
-  const posts = await reader.collections.posts.all();
+  const [posts, settings] = await Promise.all([
+    reader.collections.posts.all(),
+    getSiteSettings(),
+  ]);
 
   return (
     <div>
-      <h1>Keystatic ⚡️</h1>
-      <p>This homepage shows how to load a collection from the reader API.</p>
+      <h1>{settings.title}</h1>
+      <p>{settings.tagline}</p>
       <p>
         <Link href="/keystatic">Click here to visit the Admin UI</Link>, or the
         link below to view a post in the collection.
