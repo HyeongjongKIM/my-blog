@@ -4,10 +4,10 @@ import type { Config } from "@markdoc/markdoc";
 export const markdocConfig: Config = {};
 
 export default config({
-  storage: {
-    kind: "github",
-    repo: "HyeongjongKIM/my-blog",
-  },
+  storage:
+    process.env.NEXT_PUBLIC_KEYSTATIC_STORAGE === "github"
+      ? { kind: "github", repo: "HyeongjongKIM/my-blog" }
+      : { kind: "local" },
   singletons: {
     siteSettings: singleton({
       label: "Blog Settings",

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NEXT_PUBLIC_KEYSTATIC_STORAGE=local next dev",
+    "dev:github": "NEXT_PUBLIC_KEYSTATIC_STORAGE=github next dev",
     "build": "next build && node scripts/clean-static-export.mjs",
     "build:static": "pnpm build",
     "lint": "eslint",

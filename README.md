@@ -1,6 +1,6 @@
 # My Blog
 
-A Next.js App Router blog with Keystatic GitHub storage. Posts are stored as Markdoc files in `src/content/posts/`, with post images in `public/images/posts/`.
+A Next.js App Router blog with Keystatic local editing and optional GitHub editing. Posts are stored as Markdoc files in `src/content/posts/`, with post images in `public/images/posts/`.
 
 ## Setup
 
@@ -11,9 +11,28 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the blog, or [http://127.0.0.1:3000/keystatic](http://127.0.0.1:3000/keystatic) to manage content in `HyeongjongKIM/my-blog` on GitHub.
+Open [http://localhost:3000](http://localhost:3000) to view the blog and [http://localhost:3000/keystatic](http://localhost:3000/keystatic) to edit local content. GitHub authentication is not required for `pnpm dev`.
+
+## Local editing and preview
+
+`pnpm dev` selects Keystatic's official `local` storage mode. Saved posts, settings, and images are written to the local repository, so the administrator and the Next.js blog use the same content. Reload the blog after saving to check it before committing. This also supports developing new collections and their input forms before publishing sample content.
+
+Local image saves use the existing compression and size-limit handling. Configure **Image size limit (KiB)** and **Image maximum dimension (px)** in Blog Settings and save those settings before uploading images. Defaults are 500 KiB and 1920 px. GitHub mode saves do not use this local image processing.
+
+Review the local changes and commit the content yourself when ready. Nothing is automatically committed or pushed in local mode. Publishing to Pages happens when you push to the configured deployment branch.
+
+## Choose the editing mode
+
+| Command           | Storage           | Administrator URL                 | Saving                                         |
+| ----------------- | ----------------- | --------------------------------- | ---------------------------------------------- |
+| `pnpm dev`        | Local filesystem  | `http://localhost:3000/keystatic` | Writes local files; preview before committing  |
+| `pnpm dev:github` | GitHub repository | `http://127.0.0.1:3000/keystatic` | Commits directly to the selected GitHub branch |
+
+Stop the current dev server with Ctrl+C before switching commands. Each command sets `NEXT_PUBLIC_KEYSTATIC_STORAGE` explicitly so the API and browser select the same official storage mode. No mode value needs to be added to `.env`. The blog reader always reads the local checkout, including when the administrator uses GitHub mode.
 
 ## Keystatic GitHub setup
+
+Run `pnpm dev:github` to use the GitHub administrator for `HyeongjongKIM/my-blog`.
 
 In GitHub mode, Keystatic automatically redirects the administrator from `localhost` to `127.0.0.1` for OAuth. The Next.js `allowedDevOrigins` setting permits this loopback hostname to access development resources, including HMR. Open the administrator at `http://127.0.0.1:3000/keystatic` directly.
 
@@ -21,13 +40,13 @@ Local administrator URLs have no trailing slash so Keystatic can recognize `/key
 
 On the first visit to `/keystatic`, click **Log in with GitHub** and follow the wizard to create a GitHub App. Leave the deployed project URL blank: the administrator runs locally. Install the app for `HyeongjongKIM/my-blog`. Your GitHub account needs write access to the repository.
 
-The wizard generates authentication variables in an ignored `.env` file. [.env.example](.env.example) lists the required names. For an existing app, place its values in `.env.local` instead; avoid defining conflicting values in both files. Restart `pnpm dev` after changing environment variables. Never commit actual credentials.
+The wizard generates authentication variables in an ignored `.env` file. [.env.example](.env.example) lists the required names. For an existing app, place its values in `.env.local` instead; avoid defining conflicting values in both files. Restart `pnpm dev:github` after changing GitHub authentication variables. Never commit actual credentials.
 
 The GitHub App callback URL must match your local origin, for example `http://127.0.0.1:3000/api/keystatic/github/oauth/callback`. Use the same host and port when opening the administrator.
 
 Saving in Keystatic commits directly to the selected GitHub branch. The blog reader still reads the local checkout at development and build time. Run `git pull --ff-only` to see GitHub edits locally once your working tree is ready. Existing untracked content is not uploaded by changing the storage mode.
 
-GitHub saves go directly from the browser to GitHub and bypass the former local `/api/keystatic/update` image compression hook. Automatic upload compression and size rejection no longer apply; optimize images before uploading. Existing image settings are retained for compatibility with the local optimization utilities, but changing them does not affect GitHub uploads.
+GitHub saves go directly from the browser to GitHub and bypass local image compression and size rejection. Optimize images before uploading in this mode. Image settings apply to local saves only.
 
 See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) for GitHub App setup details.
 
@@ -37,7 +56,7 @@ See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) fo
 pnpm build:static
 ```
 
-`pnpm build` produces the same static export in `out/`. Only `pnpm dev` exposes `/keystatic` and `/api/keystatic/*`; these routes are excluded from production builds and need no authentication variables there. The static blog reads the checked-out content during the build. Missing settings use the schema defaults, and an empty blog can be built before any content is committed.
+`pnpm build` produces the same static export in `out/`. Only the dev server (`pnpm dev` or `pnpm dev:github`) exposes `/keystatic` and `/api/keystatic/*`; these routes are excluded from production builds and need no authentication variables there. The static blog reads the checked-out content during the build. Missing settings use the schema defaults, and an empty blog can be built before any content is committed.
 
 Images are served as static files in production (`next/image` runtime optimization is disabled). There is no Next.js server to start in production; deploy the contents of `out/` to a static host.
 
@@ -66,14 +85,14 @@ Reference: [Pages Git integration](https://developers.cloudflare.com/pages/confi
 
 ## Project map
 
-| Path                   | Purpose                                 |
-| ---------------------- | --------------------------------------- |
-| `app/`                 | Pages, layouts, and Keystatic routes    |
-| `app/reader.ts`        | Keystatic content reader                |
-| `keystatic.config.ts`  | Content schema and GitHub storage setup |
-| `src/content/posts/`   | Markdoc post files                      |
-| `public/images/posts/` | Images uploaded with posts              |
-| `components/`, `lib/`  | Shared UI and utilities                 |
+| Path                   | Purpose                                    |
+| ---------------------- | ------------------------------------------ |
+| `app/`                 | Pages, layouts, and Keystatic routes       |
+| `app/reader.ts`        | Keystatic content reader                   |
+| `keystatic.config.ts`  | Content schema and selectable storage mode |
+| `src/content/posts/`   | Markdoc post files                         |
+| `public/images/posts/` | Images uploaded with posts                 |
+| `components/`, `lib/`  | Shared UI and utilities                    |
 
 ## Validation
 
