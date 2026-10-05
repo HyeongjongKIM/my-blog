@@ -10,7 +10,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Project context
 
-- This is a Next.js 16 App Router blog using React 19, TypeScript, Tailwind CSS 4, and Keystatic with local file storage.
+- This is a Next.js 16 App Router blog using React 19, TypeScript, Tailwind CSS 4, and Keystatic with GitHub storage for editing and a local checkout reader for builds.
 - Routes and layouts live in `app/`. `app/reader.ts` creates the Keystatic reader; `keystatic.config.ts` defines the post schema. Posts live in `src/content/posts/` and their images in `public/images/posts/`.
 - Use pnpm 10.33.4 and Node.js 22 (see `.nvmrc`). Do not switch package managers or edit the lockfile without changing dependencies.
 
@@ -26,5 +26,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - `pnpm dev`: local development server, including the Keystatic UI at `/keystatic`.
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`: individual checks.
-- `pnpm build`: production compilation and route generation.
+- `pnpm build` / `pnpm build:static`: production static export to `out/`, excluding the Keystatic administrator and API routes.
 - `pnpm check`: full local and CI gate. The current test command permits no test files; do not describe an empty test run as behavioral coverage.

@@ -37,6 +37,29 @@ pnpm build:static
 
 Images are served as static files in production (`next/image` runtime optimization is disabled). There is no Next.js server to start in production; deploy the contents of `out/` to a static host.
 
+## Cloudflare Pages automatic deployment
+
+Create a **Pages** project in the Cloudflare dashboard using **Connect to Git**, authorize the Cloudflare GitHub App for `HyeongjongKIM/my-blog`, and select that repository. Use Git integration so Pages builds and deploys pushes directly.
+
+| Setting                                 | Value                         |
+| --------------------------------------- | ----------------------------- |
+| Production branch                       | `main`                        |
+| Framework preset                        | Next.js (Static HTML Export)  |
+| Root directory                          | Repository root (leave blank) |
+| Build command                           | `pnpm build:static`           |
+| Build output directory                  | `out`                         |
+| Build environment variable              | `NODE_VERSION=22`             |
+| Build environment variable              | `PNPM_VERSION=10.33.4`        |
+| Automatic production branch deployments | Enabled                       |
+
+Apply the build environment variables to production and to previews if enabled. Pages installs dependencies before running the build command. Keystatic authentication variables belong only in the local administrator environment; this static deployment does not need them. A Wrangler deployment configuration and a GitHub Actions deployment workflow are unnecessary for this Git integration.
+
+Once connected, a push or merged PR to `main` triggers a Pages build and replaces the production deployment when successful. Configure preview branch deployments separately: disable them if only `main` should build, or enable the branches where you want preview URLs. Keystatic commits to `main` trigger the same production build; edits on another branch must be merged to `main` to publish.
+
+After the first deployment, check the build log and the assigned `*.pages.dev` URL. The homepage should load even before any posts are committed, and `/keystatic` and `/api/keystatic/github/login` should return 404. When you add content later, check that the deployed post and image URLs load after the next successful build.
+
+Reference: [Pages Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/), [Next.js static export deployment](https://developers.cloudflare.com/pages/framework-guides/nextjs/deploy-a-static-nextjs-site/), and [build tool versions](https://developers.cloudflare.com/pages/configuration/build-image/).
+
 ## Project map
 
 | Path                   | Purpose                                 |
@@ -56,10 +79,10 @@ Run the same gate locally that CI runs on pushes and pull requests:
 pnpm check
 ```
 
-This checks formatting, ESLint, TypeScript, Vitest, and the production build in that order. You can also run each step with `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, or `pnpm build`.
+This checks formatting, ESLint, TypeScript, Vitest, and the production static build in that order. You can also run each step with `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, or `pnpm build`.
 
 The pre-commit hook formats and lints staged files. The pre-push hook runs the full-project type check and tests.
 
-There are currently no test files. `pnpm test` permits an empty suite; the other checks still run. Add focused tests alongside behavior changes when they can catch a real regression.
+Focused tests cover site settings, image utilities, administrator route isolation, and static export cleanup. `pnpm test` also permits an empty suite; an empty run is not behavioral coverage.
 
 For coding agents, [AGENTS.md](AGENTS.md) contains the project workflow and the installed Next.js documentation rule.
