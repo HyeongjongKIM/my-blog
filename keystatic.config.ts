@@ -30,6 +30,13 @@ export default config({
           multiline: true,
           validation: { isRequired: true },
         }),
+        favicon: fields.image({
+          label: "Favicon",
+          description:
+            "Upload a square image (PNG or SVG recommended) for the browser tab. Remove it to use the default icon.",
+          directory: "public/images/site",
+          publicPath: "/images/site",
+        }),
         imageMaxSizeKiB: fields.integer({
           label: "Image size limit (KiB)",
           description: "Maximum saved file size per image. 1024 KiB = 1 MiB.",
