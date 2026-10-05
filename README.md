@@ -93,16 +93,64 @@ For initial setup, manually merge the workflow file into the default branch (`ma
 
 Configure required status checks on `main` if you want auto-merge to wait for additional checks. Without blocking requirements, the merge command may merge immediately after the successful `dev` CI run. PR checks created by `GITHUB_TOKEN` can require workflow approval, so approve them if GitHub shows that requirement. Conflicts or required reviews can also prevent automatic merging. A rule requiring every `main` change to use a PR must allow the Keystatic GitHub App to bypass it so direct content saves still work.
 
-Before developing and publishing, merge the latest `main` into `dev` to include new content. After an automatic merge, synchronize again (with a clean working tree):
+### Branch roles
+
+Keep both branches permanently; do not delete or recreate `dev` after a release.
+
+| Branch | Purpose                             | Production deployment                         |
+| ------ | ----------------------------------- | --------------------------------------------- |
+| `main` | Released code and Keystatic content | Each new commit triggers Cloudflare Pages     |
+| `dev`  | Development changes                 | After CI passes and the PR merges into `main` |
+
+### Content updates
+
+Run `pnpm dev:github` and select **main** in the Keystatic administrator before saving posts, images, or Blog Settings. Saves commit directly to remote `main` and trigger a production build. The selected administrator branch is independent of the local Git checkout. To preview these saves locally, synchronize the checkout as described below; the blog reader does not fetch GitHub content automatically.
+
+Publish schema changes to `main` before using the new fields to save production content.
+
+### Start development
+
+With a clean working tree, update the local `dev` branch and bring in the latest released code and content:
 
 ```bash
 git fetch origin
 git switch dev
+git pull --ff-only origin dev
+git merge origin/main
+```
+
+Resolve any merge conflicts before continuing. Use `pnpm dev` for local development. Local Keystatic edits create files in this checkout; review them separately when selecting files to commit.
+
+### Publish development changes
+
+Once the changes are ready for production, run the full gate, stage the intended files, and commit. Replace `<files>` and `<message>` with the actual paths and commit message:
+
+```bash
+pnpm check
+git add <files>
+git commit -m "<message>"
+git push origin dev
+```
+
+For the first push of a new `dev` branch, use `git push -u origin dev` to set its upstream. Each successful development push with file changes is a release candidate; only push changes you are ready to publish.
+
+Check GitHub **Actions** for **CI**, then **Publish dev**, and the resulting `dev → main` PR. The workflow reuses an open PR and requests **Create a merge commit** auto-merge. If GitHub requirements block the merge, resolve the failed checks, required workflow approvals, reviews, or conflicts. After merging, confirm the Cloudflare Pages production build succeeds.
+
+### Synchronize after merging
+
+Keep using the same `dev` branch. With a clean working tree, bring the merge commit and any new Keystatic content from remote `main` into `dev`:
+
+```bash
+git fetch origin
+git switch dev
+git pull --ff-only origin dev
 git merge origin/main
 git push origin dev
 ```
 
-A synchronization push that introduces no file changes will not create another release PR. Every successful development push with new changes is a release candidate, so commit and push only changes you are ready to publish.
+If `main` contains all current `dev` commits, this merge fast-forwards without creating another merge commit. If both branches have new commits, Git creates a merge commit and may require conflict resolution. A synchronization push with no file changes relative to `main` does not create another release PR.
+
+Use **merge**, rather than rebase, to synchronize this shared, permanent `dev` branch. Rebasing unpublished development commits can be useful, but rebasing the published branch can rewrite commit IDs and require a force push. Routine development and synchronization need no force push.
 
 Reference: [workflow_run events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run), [GitHub CLI PR merge](https://cli.github.com/manual/gh_pr_merge).
 
