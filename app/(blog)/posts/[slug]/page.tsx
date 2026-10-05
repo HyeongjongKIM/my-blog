@@ -6,6 +6,8 @@ import { reader } from "../../../reader";
 import { markdocConfig } from "../../../../keystatic.config";
 import { formatPostDate } from "@/lib/format-post-date";
 
+export const dynamicParams = false;
+
 const getPost = cache(async (slug: string) => {
   const post = await reader.collections.posts.read(slug);
   if (!post) notFound();
@@ -55,7 +57,11 @@ export default async function Post({ params }: PageProps<"/posts/[slug]">) {
 export async function generateStaticParams() {
   const slugs = await reader.collections.posts.list();
 
-  return slugs.map((slug) => ({
+  // Next.js 16.3 rejects an empty params list for static export.
+  // Render one missing slug as a 404 so a new, empty blog can still be built.
+  const paths = slugs.length ? slugs : ["__empty_blog__"];
+
+  return paths.map((slug) => ({
     slug,
   }));
 }

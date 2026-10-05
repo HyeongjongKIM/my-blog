@@ -27,6 +27,16 @@ GitHub saves go directly from the browser to GitHub and bypass the former local 
 
 See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) for GitHub App setup details.
 
+## Static build
+
+```bash
+pnpm build:static
+```
+
+`pnpm build` produces the same static export in `out/`. Only `pnpm dev` exposes `/keystatic` and `/api/keystatic/*`; these routes are excluded from production builds and need no authentication variables there. The static blog reads the checked-out content during the build. Missing settings use the schema defaults, and an empty blog can be built before any content is committed.
+
+Images are served as static files in production (`next/image` runtime optimization is disabled). There is no Next.js server to start in production; deploy the contents of `out/` to a static host.
+
 ## Project map
 
 | Path                   | Purpose                                 |
