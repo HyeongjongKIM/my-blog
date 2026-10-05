@@ -83,6 +83,27 @@ After the first deployment, check the build log and the assigned `*.pages.dev` U
 
 Reference: [Pages Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/), [Next.js static export deployment](https://developers.cloudflare.com/pages/framework-guides/nextjs/deploy-a-static-nextjs-site/), and [build tool versions](https://developers.cloudflare.com/pages/configuration/build-image/).
 
+## Development branch publishing
+
+Keep `main` for production and Keystatic content, and `dev` for development. Push development commits to `dev`. After the existing **CI** workflow passes `pnpm check` for the latest `dev` push, **Publish dev** creates a `dev → main` PR (or reuses an open PR) and requests merge commit auto-merge. Failed checks, stale CI runs, and pushes without new changes do not publish. No squash, rebase, or branch deletion is requested. Once the merge reaches `main`, Cloudflare Pages builds production.
+
+For initial setup, manually merge the workflow file into the default branch (`main`); GitHub only runs `workflow_run` listeners present on the default branch. Subsequent `dev` pushes use the automation. Repository settings must allow GitHub Actions to create pull requests, merge commits, and auto-merge. Keep **Automatically delete head branches** disabled. The workflow uses the built-in `GITHUB_TOKEN`; no personal access token is needed.
+
+Configure required status checks on `main` if you want auto-merge to wait for additional checks. Without blocking requirements, the merge command may merge immediately after the successful `dev` CI run. PR checks created by `GITHUB_TOKEN` can require workflow approval, so approve them if GitHub shows that requirement. Conflicts or required reviews can also prevent automatic merging. A rule requiring every `main` change to use a PR must allow the Keystatic GitHub App to bypass it so direct content saves still work.
+
+Before developing and publishing, merge the latest `main` into `dev` to include new content. After an automatic merge, synchronize again (with a clean working tree):
+
+```bash
+git fetch origin
+git switch dev
+git merge origin/main
+git push origin dev
+```
+
+A synchronization push that introduces no file changes will not create another release PR. Every successful development push with new changes is a release candidate, so commit and push only changes you are ready to publish.
+
+Reference: [workflow_run events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run), [GitHub CLI PR merge](https://cli.github.com/manual/gh_pr_merge).
+
 ## Project map
 
 | Path                   | Purpose                                    |

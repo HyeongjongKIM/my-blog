@@ -1,0 +1,71 @@
+name: Publish dev
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: publish-dev
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # No checkout: this privileged job runs no code or artifacts from dev.
+      - name: Create PR and enable merge commit auto-merge
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_sha=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq '.object.sha')
+          if [[ "$latest_sha" != "$TESTED_SHA" ]]; then
+            echo "Skipping an older CI run; dev has newer commits."
+            exit 0
+          fi
+
+          ahead=$(gh api "repos/$GH_REPO/compare/main...$TESTED_SHA" --jq '.ahead_by')
+          if [[ "$ahead" == "0" ]]; then
+            echo "dev has no new commits to publish."
+            exit 0
+          fi
+          changed_files=$(gh api "repos/$GH_REPO/compare/main...$TESTED_SHA" --jq '.files | length')
+          if [[ "$changed_files" == "0" ]]; then
+            echo "dev has no file changes to publish."
+            exit 0
+          fi
+
+          pr_number=$(gh pr list --repo "$GH_REPO" --base main --head dev --state open \
+            --json number,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          if [[ -z "$pr_number" ]]; then
+            body_file=$(mktemp)
+            trap 'rm -f "$body_file"' EXIT
+            cat > "$body_file" <<'BODY'
+          Publish development changes from dev to main.
+
+          The dev push passed CI (pnpm check). This PR uses merge commit auto-merge and waits for any additional repository requirements. Keep the dev branch after merging.
+          BODY
+            gh pr create --repo "$GH_REPO" --base main --head dev \
+              --title "chore: merge dev into main" --body-file "$body_file"
+            pr_number=$(gh pr list --repo "$GH_REPO" --base main --head dev --state open \
+              --json number,isCrossRepository \
+              --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
+          fi
+
+          gh pr merge "$pr_number" --repo "$GH_REPO" \
+            --auto --merge --match-head-commit "$TESTED_SHA"
