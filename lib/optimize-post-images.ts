@@ -9,8 +9,15 @@ export async function optimizePostImage(
   contents: string,
   settings: PostImageSettings = resolvePostImageSettings(null),
 ): Promise<string> {
+  const isFavicon =
+    /^public\/images\/site\/(?!(?:.*\/)?\.\.(?:\/|$)).+\.(?:jpe?g|png|webp|gif|svg|avif|ico)$/i.test(
+      path,
+    );
+  if (isFavicon) settings = { maxBytes: 100 * 1024, maxDimension: 64 };
+
   if (
-    !/^public\/images\/posts\/(?!.*(?:^|\/)\.\.(?:\/|$)).+\.(?:jpe?g|png|webp|gif|svg|avif)$/i.test(
+    !isFavicon &&
+    !/^public\/images\/posts\/(?!(?:.*\/)?\.\.(?:\/|$)).+\.(?:jpe?g|png|webp|gif|svg|avif)$/i.test(
       path,
     )
   ) {
@@ -26,6 +33,13 @@ export async function optimizePostImage(
     }
     if (!["jpeg", "png", "webp"].includes(metadata.format)) {
       return enforceImageLimit(path, original, contents, settings.maxBytes);
+    }
+    // A favicon must meet the dimension limit even if its original bytes are smaller.
+    if (
+      isFavicon &&
+      Math.max(metadata.width, metadata.height) > settings.maxDimension
+    ) {
+      smallest = Buffer.alloc(0);
     }
     for (const scale of [1, 5 / 6, 2 / 3, 1 / 2, 1 / 3]) {
       const size = Math.max(1, Math.floor(settings.maxDimension * scale));
@@ -45,7 +59,8 @@ export async function optimizePostImage(
         } else {
           optimized = await image.webp({ quality }).toBuffer();
         }
-        if (optimized.length < smallest.length) smallest = optimized;
+        if (smallest.length === 0 || optimized.length < smallest.length)
+          smallest = optimized;
         if (smallest.length <= settings.maxBytes) {
           return smallest === original
             ? contents
@@ -56,6 +71,7 @@ export async function optimizePostImage(
     }
   } catch (error) {
     if (error instanceof PostImageSizeError) throw error;
+    if (smallest.length === 0) smallest = original;
     // Preserve undecodable uploads only when they are within the size limit.
   }
   return enforceImageLimit(

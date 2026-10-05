@@ -33,7 +33,7 @@ export default config({
         favicon: fields.image({
           label: "Favicon",
           description:
-            "Upload a square image (PNG or SVG recommended) for the browser tab. Remove it to use the default icon.",
+            "Upload a square PNG, JPEG, or WebP. Local saves compress and resize to at most 64 px (100 KiB limit). Other formats keep their original dimensions. Remove to use the default icon.",
           directory: "public/images/site",
           publicPath: "/images/site",
         }),

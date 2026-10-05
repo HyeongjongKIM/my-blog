@@ -200,3 +200,86 @@ describe("post image optimization", () => {
     expect(await request.text()).toBe("{");
   });
 });
+
+describe("favicon optimization", () => {
+  it("resizes even when the original encoding is smaller and preserves transparency", async () => {
+    const image = await sharp({
+      create: {
+        width: 2048,
+        height: 1024,
+        channels: 4,
+        background: { r: 255, g: 0, b: 0, alpha: 0.5 },
+      },
+    })
+      .webp({ lossless: true })
+      .toBuffer();
+    const request = new Request("http://localhost/api/keystatic/update", {
+      method: "POST",
+      headers: { "content-type": "application/json", "no-cors": "1" },
+      body: JSON.stringify({
+        additions: [
+          {
+            path: "public/images/site/favicon.webp",
+            contents: image.toString("base64url"),
+          },
+        ],
+      }),
+    });
+    const saved = await (
+      await optimizePostImageRequest(request, {
+        maxBytes: 1,
+        maxDimension: 800,
+      })
+    ).json();
+    const bytes = Buffer.from(saved.additions[0].contents, "base64url");
+    expect(await sharp(bytes).metadata()).toMatchObject({
+      format: "webp",
+      width: 64,
+      height: 32,
+      hasAlpha: true,
+    });
+    expect(bytes.length).toBeLessThanOrEqual(100 * 1024);
+  });
+
+  it("compresses raster formats without enlarging small icons", async () => {
+    for (const format of ["png", "jpeg", "webp"] as const) {
+      const image = await sharp({
+        create: { width: 32, height: 16, channels: 3, background: "red" },
+      })
+        .toFormat(format)
+        .toBuffer();
+      const bytes = Buffer.from(
+        await optimizePostImage(
+          `public/images/site/favicon.${format}`,
+          image.toString("base64url"),
+        ),
+        "base64url",
+      );
+      expect(await sharp(bytes).metadata()).toMatchObject({
+        format,
+        width: 32,
+        height: 16,
+      });
+      expect(bytes.length).toBeLessThanOrEqual(image.length);
+    }
+  });
+
+  it("preserves SVG and enforces the favicon byte limit", async () => {
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="red"/></svg>',
+    ).toString("base64url");
+    expect(await optimizePostImage("public/images/site/favicon.svg", svg)).toBe(
+      svg,
+    );
+    await expect(
+      optimizePostImage(
+        "public/images/site/favicon.svg",
+        Buffer.alloc(100 * 1024 + 1).toString("base64url"),
+      ),
+    ).rejects.toThrow("100 KiB");
+    const contents = Buffer.alloc(100 * 1024 + 1).toString("base64url");
+    expect(
+      await optimizePostImage("public/images/site/../favicon.png", contents),
+    ).toBe(contents);
+  });
+});
