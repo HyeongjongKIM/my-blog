@@ -1,6 +1,6 @@
 # My Blog
 
-A Next.js App Router blog with local Keystatic content. Posts are stored as Markdoc files in `src/content/posts/`, with post images in `public/images/posts/`.
+A Next.js App Router blog with Keystatic GitHub storage. Posts are stored as Markdoc files in `src/content/posts/`, with post images in `public/images/posts/`.
 
 ## Setup
 
@@ -11,20 +11,32 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to view the blog, or [http://localhost:3000/keystatic](http://localhost:3000/keystatic) to edit local posts. Keystatic writes content and images into the repository, so review `git status` after editing.
+Open [http://localhost:3000](http://localhost:3000) to view the blog, or [http://localhost:3000/keystatic](http://localhost:3000/keystatic) to manage content in `HyeongjongKIM/my-blog` on GitHub.
 
-When a post is saved through local Keystatic, uploaded JPEG, PNG, and WebP images are optimized before being written to `public/images/posts/`. In Keystatic → Blog Settings, set **Image size limit (KiB)** and **Image maximum dimension (px)**, then save settings before uploading images. The defaults are 500 KiB (512,000 bytes) and 1920 px. Changes apply to subsequent saves without restarting the server. Optimization starts at the configured dimension and quality 82, then tries quality 72 and 62 and progressively smaller bounds (5/6, 2/3, 1/2, and 1/3 of that dimension) until the file fits. PNG uses lossless compression after resizing. The original format, aspect ratio, path, and transparency are preserved; smaller originals are retained. Animation, SVG, GIF, and AVIF are not compressed but must meet the same byte limit. Undecodable images also must meet the limit. If optimization cannot meet the limit, the entire save is rejected before files are written. Metadata is stripped from optimized images. Keep original photos separately if needed. Existing files and direct filesystem copies are not automatically optimized or checked. Settings are stored in `src/content/site-settings.json` and can be committed with the blog. Missing or empty settings use the defaults defined in `keystatic.config.ts`.
+## Keystatic GitHub setup
+
+On the first visit to `/keystatic`, click **Log in with GitHub** and follow the wizard to create a GitHub App. Leave the deployed project URL blank: the administrator runs locally. Install the app for `HyeongjongKIM/my-blog`. Your GitHub account needs write access to the repository.
+
+The wizard generates authentication variables in an ignored `.env` file. [.env.example](.env.example) lists the required names. For an existing app, place its values in `.env.local` instead; avoid defining conflicting values in both files. Restart `pnpm dev` after changing environment variables. Never commit actual credentials.
+
+The GitHub App callback URL must match your local origin, for example `http://localhost:3000/api/keystatic/github/oauth/callback`. Use the same host and port when opening the administrator.
+
+Saving in Keystatic commits directly to the selected GitHub branch. The blog reader still reads the local checkout at development and build time. Run `git pull --ff-only` to see GitHub edits locally once your working tree is ready. Existing untracked content is not uploaded by changing the storage mode.
+
+GitHub saves go directly from the browser to GitHub and bypass the former local `/api/keystatic/update` image compression hook. Automatic upload compression and size rejection no longer apply; optimize images before uploading. Existing image settings are retained for compatibility with the local optimization utilities, but changing them does not affect GitHub uploads.
+
+See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) for GitHub App setup details.
 
 ## Project map
 
-| Path                   | Purpose                                |
-| ---------------------- | -------------------------------------- |
-| `app/`                 | Pages, layouts, and Keystatic routes   |
-| `app/reader.ts`        | Keystatic content reader               |
-| `keystatic.config.ts`  | Content schema and local storage setup |
-| `src/content/posts/`   | Markdoc post files                     |
-| `public/images/posts/` | Images uploaded with posts             |
-| `components/`, `lib/`  | Shared UI and utilities                |
+| Path                   | Purpose                                 |
+| ---------------------- | --------------------------------------- |
+| `app/`                 | Pages, layouts, and Keystatic routes    |
+| `app/reader.ts`        | Keystatic content reader                |
+| `keystatic.config.ts`  | Content schema and GitHub storage setup |
+| `src/content/posts/`   | Markdoc post files                      |
+| `public/images/posts/` | Images uploaded with posts              |
+| `components/`, `lib/`  | Shared UI and utilities                 |
 
 ## Validation
 

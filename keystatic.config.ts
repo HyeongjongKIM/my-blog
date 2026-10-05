@@ -5,7 +5,8 @@ export const markdocConfig: Config = {};
 
 export default config({
   storage: {
-    kind: "local",
+    kind: "github",
+    repo: "HyeongjongKIM/my-blog",
   },
   singletons: {
     siteSettings: singleton({
