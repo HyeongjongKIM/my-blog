@@ -50,6 +50,7 @@ export default config({
     posts: collection({
       label: "Posts",
       slugField: "title",
+      columns: ["title", "createdAt"],
       path: "src/content/posts/*",
       format: { contentField: "content" },
       schema: {
