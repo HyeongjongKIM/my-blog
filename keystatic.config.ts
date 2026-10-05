@@ -29,6 +29,19 @@ export default config({
           multiline: true,
           validation: { isRequired: true },
         }),
+        imageMaxSizeKiB: fields.integer({
+          label: "Image size limit (KiB)",
+          description: "Maximum saved file size per image. 1024 KiB = 1 MiB.",
+          defaultValue: 500,
+          validation: { min: 1, max: 10240 },
+        }),
+        imageMaxDimension: fields.integer({
+          label: "Image maximum dimension (px)",
+          description:
+            "Maximum width or height, keeping the aspect ratio. Save settings before uploading images.",
+          defaultValue: 1920,
+          validation: { min: 64, max: 8192 },
+        }),
       },
     }),
   },

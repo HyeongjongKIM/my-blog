@@ -13,6 +13,8 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) to view the blog, or [http://localhost:3000/keystatic](http://localhost:3000/keystatic) to edit local posts. Keystatic writes content and images into the repository, so review `git status` after editing.
 
+When a post is saved through local Keystatic, uploaded JPEG, PNG, and WebP images are optimized before being written to `public/images/posts/`. In Keystatic → Blog Settings, set **Image size limit (KiB)** and **Image maximum dimension (px)**, then save settings before uploading images. The defaults are 500 KiB (512,000 bytes) and 1920 px. Changes apply to subsequent saves without restarting the server. Optimization starts at the configured dimension and quality 82, then tries quality 72 and 62 and progressively smaller bounds (5/6, 2/3, 1/2, and 1/3 of that dimension) until the file fits. PNG uses lossless compression after resizing. The original format, aspect ratio, path, and transparency are preserved; smaller originals are retained. Animation, SVG, GIF, and AVIF are not compressed but must meet the same byte limit. Undecodable images also must meet the limit. If optimization cannot meet the limit, the entire save is rejected before files are written. Metadata is stripped from optimized images. Keep original photos separately if needed. Existing files and direct filesystem copies are not automatically optimized or checked. Settings are stored in `src/content/site-settings.json` and can be committed with the blog. Missing or empty settings use the defaults defined in `keystatic.config.ts`.
+
 ## Project map
 
 | Path                   | Purpose                                |
