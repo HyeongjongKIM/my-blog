@@ -30,6 +30,13 @@ export default config({
           multiline: true,
           validation: { isRequired: true },
         }),
+        favicon: fields.image({
+          label: "Favicon",
+          description:
+            "Upload a square PNG, JPEG, or WebP. Saves compress and resize to at most 64 px (100 KiB limit). Other formats keep their original dimensions. Remove to use the default icon.",
+          directory: "public/images/site",
+          publicPath: "/images/site",
+        }),
         imageMaxSizeKiB: fields.integer({
           label: "Image size limit (KiB)",
           description: "Maximum saved file size per image. 1024 KiB = 1 MiB.",

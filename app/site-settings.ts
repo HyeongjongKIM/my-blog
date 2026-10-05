@@ -6,6 +6,7 @@ type SiteSettings = {
   title: string;
   tagline: string;
   metaDescription: string;
+  favicon: string | null;
 };
 
 export function resolveSiteSettings(
@@ -15,6 +16,7 @@ export function resolveSiteSettings(
     keystaticConfig.singletons.siteSettings.schema;
 
   return {
+    favicon: settings?.favicon || null,
     title: settings?.title?.trim() || title.defaultValue(),
     tagline: settings?.tagline?.trim() || tagline.defaultValue(),
     metaDescription:
