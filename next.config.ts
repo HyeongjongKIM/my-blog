@@ -5,6 +5,7 @@ export default function nextConfig(phase: string): NextConfig {
   const isDevelopment = phase === PHASE_DEVELOPMENT_SERVER;
 
   return {
+    allowedDevOrigins: ["127.0.0.1"],
     output: isDevelopment ? undefined : "export",
     trailingSlash: true,
     images: { unoptimized: !isDevelopment },
