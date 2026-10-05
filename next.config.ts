@@ -7,7 +7,8 @@ export default function nextConfig(phase: string): NextConfig {
   return {
     allowedDevOrigins: ["127.0.0.1"],
     output: isDevelopment ? undefined : "export",
-    trailingSlash: true,
+    // Keystatic treats a trailing slash as an extra route segment.
+    trailingSlash: !isDevelopment,
     images: { unoptimized: !isDevelopment },
     // Only the local dev server exposes the administrator and authentication API.
     pageExtensions: [

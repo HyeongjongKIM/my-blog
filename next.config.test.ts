@@ -19,6 +19,11 @@ describe("administrator route isolation", () => {
     }
   });
 
+  it("keeps local setup URLs free of trailing route segments", () => {
+    expect(nextConfig(PHASE_DEVELOPMENT_SERVER).trailingSlash).toBe(false);
+    expect(nextConfig(PHASE_PRODUCTION_BUILD).trailingSlash).toBe(true);
+  });
+
   it("exports static assets without a runtime image server", () => {
     const config = nextConfig(PHASE_PRODUCTION_BUILD);
     expect(config.output).toBe("export");

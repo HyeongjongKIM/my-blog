@@ -17,6 +17,8 @@ Open [http://localhost:3000](http://localhost:3000) to view the blog, or [http:/
 
 In GitHub mode, Keystatic automatically redirects the administrator from `localhost` to `127.0.0.1` for OAuth. The Next.js `allowedDevOrigins` setting permits this loopback hostname to access development resources, including HMR. Open the administrator at `http://127.0.0.1:3000/keystatic` directly.
 
+Local administrator URLs have no trailing slash so Keystatic can recognize `/keystatic/setup`. Static production routes retain trailing slashes.
+
 On the first visit to `/keystatic`, click **Log in with GitHub** and follow the wizard to create a GitHub App. Leave the deployed project URL blank: the administrator runs locally. Install the app for `HyeongjongKIM/my-blog`. Your GitHub account needs write access to the repository.
 
 The wizard generates authentication variables in an ignored `.env` file. [.env.example](.env.example) lists the required names. For an existing app, place its values in `.env.local` instead; avoid defining conflicting values in both files. Restart `pnpm dev` after changing environment variables. Never commit actual credentials.
