@@ -29,5 +29,6 @@ describe("administrator route isolation", () => {
     expect(config.output).toBe("export");
     expect(config.images?.unoptimized).toBe(true);
     expect(nextConfig(PHASE_DEVELOPMENT_SERVER).output).toBeUndefined();
+    expect(nextConfig(PHASE_DEVELOPMENT_SERVER).images?.unoptimized).toBe(true);
   });
 });

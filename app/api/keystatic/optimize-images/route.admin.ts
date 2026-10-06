@@ -1,6 +1,7 @@
 import {
   optimizePostImage,
   PostImageSizeError,
+  ImageOptimizerError,
 } from "@/lib/optimize-post-images";
 
 export async function POST(request: Request) {
@@ -49,6 +50,8 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof PostImageSizeError)
       return new Response(error.message, { status: 413 });
+    if (error instanceof ImageOptimizerError)
+      return new Response(error.message, { status: error.status });
     throw error;
   }
 }

@@ -9,7 +9,7 @@ export default function nextConfig(phase: string): NextConfig {
     output: isDevelopment ? undefined : "export",
     // Keystatic treats a trailing slash as an extra route segment.
     trailingSlash: !isDevelopment,
-    images: { unoptimized: !isDevelopment },
+    images: { unoptimized: true },
     // Only the local dev server exposes the administrator and authentication API.
     pageExtensions: [
       "ts",

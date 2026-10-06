@@ -1,8 +1,9 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
-import sharp from "sharp";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOptimizingGitHubFetch } from "./github-image-optimization";
 import { POST } from "@/app/api/keystatic/optimize-images/route.admin";
+
+afterEach(() => vi.unstubAllGlobals());
 
 const repo = "HyeongjongKIM/my-blog";
 const endpoint = "https://api.github.com/graphql";
@@ -36,16 +37,14 @@ function request(body: ReturnType<typeof mutation>) {
 
 describe("GitHub image optimization", () => {
   it("optimizes post and favicon bytes before committing, using remote settings and keeping auth private", async () => {
-    const image = await sharp({
-      create: {
-        width: 2000,
-        height: 1000,
-        channels: 4,
-        background: { r: 255, g: 0, b: 0, alpha: 0.5 },
-      },
-    })
-      .png()
-      .toBuffer();
+    const image = Buffer.from("source image");
+    const worker = vi.fn<typeof fetch>(async (_input, init) => {
+      const form = init!.body as FormData;
+      return new Response(`optimized-${form.get("width")}`, {
+        headers: { "content-type": "image/png" },
+      });
+    });
+    vi.stubGlobal("fetch", worker);
     const body = mutation([
       {
         path: "public/images/posts/photo.png",
@@ -111,18 +110,17 @@ describe("GitHub image optimization", () => {
     );
     const additions = committed!.variables.input.fileChanges.additions;
     expect(additions[2]).toEqual(body.variables.input.fileChanges.additions[2]);
-    for (const [index, width, height] of [
-      [0, 800, 400],
-      [1, 64, 32],
-    ]) {
-      const bytes = Buffer.from(additions[index].contents, "base64");
-      expect(await sharp(bytes).metadata()).toMatchObject({
-        format: "png",
-        width,
-        height,
-        hasAlpha: true,
-      });
-      expect(bytes.length).toBeLessThanOrEqual(100 * 1024);
+    expect(Buffer.from(additions[0].contents, "base64url").toString()).toBe(
+      "optimized-800",
+    );
+    expect(Buffer.from(additions[1].contents, "base64url").toString()).toBe(
+      "optimized-64",
+    );
+    expect(worker).toHaveBeenCalledTimes(2);
+    for (const [, init] of worker.mock.calls) {
+      expect(new Headers(init?.headers).get("authorization")).not.toBe(
+        "Bearer test-token",
+      );
     }
   });
 

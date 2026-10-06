@@ -5,6 +5,7 @@ import { resolvePostImageSettings } from "../../../../lib/post-image-settings";
 import {
   optimizePostImageRequest,
   PostImageSizeError,
+  ImageOptimizerError,
 } from "../../../../lib/optimize-post-images";
 
 const handlers = makeRouteHandler({ config: keystaticConfig });
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
     if (error instanceof PostImageSizeError) {
       return new Response(error.message, { status: 413 });
     }
+    if (error instanceof ImageOptimizerError)
+      return new Response(error.message, { status: error.status });
     throw error;
   }
 }

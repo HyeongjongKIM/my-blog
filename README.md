@@ -17,11 +17,19 @@ Open [http://localhost:3000](http://localhost:3000) to view the blog and [http:/
 
 `pnpm dev` selects Keystatic's official `local` storage mode. Saved posts, settings, and images are written to the local repository, so the administrator and the Next.js blog use the same content. Reload the blog after saving to check it before committing. This also supports developing new collections and their input forms before publishing sample content.
 
-In **Blog Settings**, upload a square image in **Favicon** (PNG or SVG recommended) and save to change the browser tab icon. Remove the image and save to restore the default icon. Favicon uploads are stored in `public/images/site/`. Local and GitHub saves compress PNG, JPEG, and WebP favicons and resize to at most 64 px, preserving aspect ratio and transparency without enlarging small images. Other formats (including SVG and animated GIF) retain their original bytes and dimensions. All favicon uploads have a fixed 100 KiB saved-file limit, separate from the post image settings. Reload the blog after saving; browsers may cache tab icons. Production changes appear after rebuilding and deploying the site.
+In **Blog Settings**, upload a square image in **Favicon** (PNG or SVG recommended) and save to change the browser tab icon. Remove the image and save to restore the default icon. Favicon uploads are stored in `public/images/site/`. Local and GitHub saves send PNG, JPEG, WebP, and AVIF favicons to the external image optimizer and resize to at most 64 px, preserving aspect ratio and transparency without enlarging small images. Other formats (including SVG and animated GIF) retain their original bytes and dimensions. All favicon uploads have a fixed 100 KiB saved-file limit, separate from the post image settings. Reload the blog after saving; browsers may cache tab icons. Production changes appear after rebuilding and deploying the site.
 
-Image saves in both modes use the existing compression and size-limit handling. Configure **Image size limit (KiB)** and **Image maximum dimension (px)** in Blog Settings and save those settings before uploading images. Defaults are 500 KiB and 1920 px. GitHub saves read settings from the commit being edited, or from settings included in the same save.
+Image saves in both modes use the external image optimizer and the configured size limits. Configure **Image size limit (KiB)** and **Image maximum dimension (px)** in Blog Settings and save those settings before uploading images. Defaults are 500 KiB and 1920 px. GitHub saves read settings from the commit being edited, or from settings included in the same save.
 
 Review the local changes and commit the content yourself when ready. Nothing is automatically committed or pushed in local mode. Publishing to Pages happens when you push to the configured deployment branch.
+
+## Image optimizer development
+
+Run `/Users/kim/Developer/image-optimizer-api` at `http://localhost:8787` before uploading images. Both local and GitHub editing call `POST /v1/optimize` from the blog server. The blog no longer decodes, resizes, or compresses images itself. Output retains the input format and filename; PNG requests omit quality parameters. AVIF is also supported. Unsupported files remain subject to the saved-file size limit. Invalid images and API failures stop the save without falling back to the source.
+
+The default API URL is `http://localhost:8787`. To use a deployed Worker later, set `IMAGE_OPTIMIZER_API_URL` to its base URL in `.env.local` and restart the administrator. Set `IMAGE_OPTIMIZER_API_KEY` only if the Worker has an `API_KEY`; it is sent server-side and is never included in the browser bundle. Each image request has a 30-second timeout and uploads are processed sequentially. Static builds do not call the optimizer or need these variables.
+
+The offline Worker verifies HTTP integration and local transformations, but Cloudflare Images quality, fit, transparency, and metadata behavior still require remote verification in the API project.
 
 ## Choose the editing mode
 
@@ -48,7 +56,7 @@ The GitHub App callback URL must match your local origin, for example `http://12
 
 Saving in Keystatic commits directly to the selected GitHub branch. The blog reader still reads the local checkout at development and build time. Run `git pull --ff-only` to see GitHub edits locally once your working tree is ready. Existing untracked content is not uploaded by changing the storage mode.
 
-Before GitHub commits, the local administrator sends new post images and favicons to its optimization API. The API reuses the same image processing as local saves; GitHub credentials are never sent to it. Optimization or settings-read failures stop the save. SVG, animated images, and other unsupported formats retain their original bytes and remain subject to the size limit. This adapter targets Keystatic 0.6's GitHub GraphQL commit transport and should be verified when upgrading Keystatic.
+Before GitHub commits, the local administrator sends new post images and favicons to its optimization API. The local API forwards images to the same external Worker used by local saves; GitHub credentials are never sent to it. Optimization or settings-read failures stop the save. GIF, SVG, ICO, and images rejected by the Worker as animated retain their original bytes and remain subject to the size limit. This adapter targets Keystatic 0.6's GitHub GraphQL commit transport and should be verified when upgrading Keystatic.
 
 See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) for GitHub App setup details.
 
