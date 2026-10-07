@@ -19,23 +19,39 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       (github.event.workflow_run.event == 'push' ||
-       (github.event.workflow_run.event == 'pull_request' &&
-        github.event.workflow_run.pull_requests[0].base.ref == 'main' &&
-        github.event.workflow_run.pull_requests[0].head.ref == 'dev')) &&
+       github.event.workflow_run.event == 'pull_request') &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       CI_EVENT: ${{ github.event.workflow_run.event }}
-      CI_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
-      TESTED_SHA: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].head.sha || github.event.workflow_run.head_sha }}
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       # No checkout: this privileged job runs no code or artifacts from dev.
       - name: Create PR after push CI or publish after PR CI
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ "$CI_EVENT" == "pull_request" ]]; then
+            if ! jq -e '.workflow_run.pull_requests | type == "array" and length == 1' \
+              "$GITHUB_EVENT_PATH" >/dev/null; then
+              echo "Skipping PR CI without exactly one associated PR."
+              exit 0
+            fi
+            pr_data=$(jq -c '.workflow_run.pull_requests | first' "$GITHUB_EVENT_PATH")
+            if ! jq -e '
+              .base.ref == "main" and .head.ref == "dev" and
+              (.number | type == "number" and . > 0) and
+              (.head.sha | type == "string" and length > 0)
+            ' <<< "$pr_data" >/dev/null; then
+              echo "Skipping unrelated or incomplete PR CI metadata."
+              exit 0
+            fi
+            CI_PR_NUMBER=$(jq -r .number <<< "$pr_data")
+            TESTED_SHA=$(jq -r .head.sha <<< "$pr_data")
+          fi
 
           latest_sha=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq '.object.sha')
           if [[ "$latest_sha" != "$TESTED_SHA" ]]; then

@@ -1,5 +1,7 @@
 // @vitest-environment node
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect, it } from "vitest";
 
@@ -36,17 +38,40 @@ gh() {
   fi
 }
 `;
-  return spawnSync("bash", ["-c", fixture + script], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      CI_EVENT: event,
-      CI_PR_NUMBER: "2",
-      GH_REPO: "example/blog",
-      TESTED_SHA: "tested",
-      MODE: mode,
-    },
-  });
+  const directory = mkdtempSync(join(tmpdir(), "publish-dev-event-"));
+  const eventPath = join(directory, "event.json");
+  const pr = {
+    number: 2,
+    base: { ref: mode === "unrelated" ? "other" : "main" },
+    head: { ref: "dev", sha: "tested" },
+  };
+  const pullRequests =
+    mode === "empty"
+      ? []
+      : mode === "missing"
+        ? undefined
+        : mode === "multiple"
+          ? [pr, pr]
+          : [pr];
+  writeFileSync(
+    eventPath,
+    JSON.stringify({ workflow_run: { pull_requests: pullRequests } }),
+  );
+  try {
+    return spawnSync("bash", ["-c", fixture + script], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CI_EVENT: event,
+        GITHUB_EVENT_PATH: eventPath,
+        GH_REPO: "example/blog",
+        TESTED_SHA: "tested",
+        MODE: mode,
+      },
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 it("creates or reuses a PR after push CI without requesting a merge", () => {
   const result = run("push");
@@ -86,12 +111,8 @@ it("accepts only successful same-repository dev push or dev-to-main PR CI", () =
   expect(workflow).toContain(
     "github.event.workflow_run.conclusion == 'success'",
   );
-  expect(workflow).toContain(
-    "github.event.workflow_run.pull_requests[0].base.ref == 'main'",
-  );
-  expect(workflow).toContain(
-    "github.event.workflow_run.pull_requests[0].head.ref == 'dev'",
-  );
+  expect(workflow).toContain('.base.ref == "main"');
+  expect(workflow).toContain('.head.ref == "dev"');
   expect(workflow).toContain(
     "github.event.workflow_run.head_repository.full_name == github.repository",
   );
@@ -102,4 +123,16 @@ it("reports remaining non-passing statuses without calling auto-merge", () => {
   expect(result.status).toBe(1);
   expect(result.stderr).toContain("gh pr checks");
   expect(result.stderr).not.toContain("gh pr merge");
+});
+
+it.each(["empty", "missing", "multiple", "unrelated"])(
+  "skips %s PR metadata before any GitHub API calls",
+  (mode) => {
+    const result = run("pull_request", mode);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("gh ");
+  },
+);
+it("does not index PR arrays in GitHub context expressions", () => {
+  expect(workflow).not.toContain("github.event.workflow_run.pull_requests[0]");
 });
