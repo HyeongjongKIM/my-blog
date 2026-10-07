@@ -7,11 +7,17 @@ import {
   ImageOptimizerError,
 } from "../../../../lib/optimize-post-images";
 
-const handlers = makeRouteHandler({ config: keystaticConfig });
+// Next.js imports routes while building. GitHub secrets exist only at runtime.
+function getHandlers() {
+  return makeRouteHandler({ config: keystaticConfig });
+}
 
-export const GET = handlers.GET;
+export async function GET(request: Request) {
+  return getHandlers().GET(request);
+}
 
 export async function POST(request: Request) {
+  const handlers = getHandlers();
   if (keystaticConfig.storage.kind !== "local") {
     return handlers.POST(request);
   }
