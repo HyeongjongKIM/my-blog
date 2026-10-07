@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PHASE_DEVELOPMENT_SERVER,
   PHASE_PRODUCTION_BUILD,
@@ -7,6 +7,21 @@ import { createValidFileMatcher } from "next/dist/server/lib/find-page-file";
 import nextConfig from "./next.config";
 
 describe("administrator route isolation", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("deploys administrator routes without blog pages in Workers mode", async () => {
+    vi.stubEnv("KEYSTATIC_ADMIN_WORKER", "1");
+    const config = nextConfig(PHASE_PRODUCTION_BUILD);
+    const matcher = createValidFileMatcher(config.pageExtensions!, undefined);
+    expect(matcher.isAppRouterPage("page.admin.tsx")).toBe(true);
+    expect(matcher.isAppRouterRoute("route.admin.ts")).toBe(true);
+    expect(matcher.isAppRouterPage("page.blog.tsx")).toBe(false);
+    expect(config.output).toBeUndefined();
+    expect(config.trailingSlash).toBe(false);
+    expect(await config.redirects!()).toEqual([
+      { source: "/", destination: "/keystatic", permanent: false },
+    ]);
+  });
   it("recognizes the administrator and API only in development", () => {
     for (const phase of [PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD]) {
       const config = nextConfig(phase);
@@ -15,7 +30,7 @@ describe("administrator route isolation", () => {
 
       expect(matcher.isAppRouterPage("page.admin.tsx")).toBe(isDevelopment);
       expect(matcher.isAppRouterRoute("route.admin.ts")).toBe(isDevelopment);
-      expect(matcher.isAppRouterPage("page.tsx")).toBe(true);
+      expect(matcher.isAppRouterPage("page.blog.tsx")).toBe(true);
     }
   });
 

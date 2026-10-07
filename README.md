@@ -56,7 +56,7 @@ The GitHub App callback URL must match your local origin, for example `http://12
 
 Saving in Keystatic commits directly to the selected GitHub branch. The blog reader still reads the local checkout at development and build time. Run `git pull --ff-only` to see GitHub edits locally once your working tree is ready. Existing untracked content is not uploaded by changing the storage mode.
 
-Before GitHub commits, the local administrator sends new post images and favicons to its optimization API. The local API forwards images to the same external Worker used by local saves; GitHub credentials are never sent to it. Optimization or settings-read failures stop the save. GIF, SVG, ICO, and images rejected by the Worker as animated retain their original bytes and remain subject to the size limit. This adapter targets Keystatic 0.6's GitHub GraphQL commit transport and should be verified when upgrading Keystatic.
+Before GitHub commits, the administrator sends new post images and favicons to its optimization API. The administrator API forwards images to the same external Worker used by local saves; GitHub credentials are never sent to it. Optimization or settings-read failures stop the save. GIF, SVG, ICO, and images rejected by the Worker as animated retain their original bytes and remain subject to the size limit. This adapter targets Keystatic 0.6's GitHub GraphQL commit transport and should be verified when upgrading Keystatic.
 
 See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) for GitHub App setup details.
 
@@ -66,7 +66,7 @@ See the [Keystatic GitHub mode guide](https://keystatic.com/docs/github-mode) fo
 pnpm build:static
 ```
 
-`pnpm build` produces the same static export in `out/`. Only the dev server (`pnpm dev` or `pnpm dev:github`) exposes `/keystatic` and `/api/keystatic/*`; these routes are excluded from production builds and need no authentication variables there. The static blog reads the checked-out content during the build. Missing settings use the schema defaults, and an empty blog can be built before any content is committed.
+`pnpm build` produces the same static export in `out/`. The dev server (`pnpm dev` or `pnpm dev:github`) and the separate administrator Worker expose `/keystatic` and `/api/keystatic/*`; these routes are excluded from static production builds and need no authentication variables there. The static blog reads the checked-out content during the build. Missing settings use the schema defaults, and an empty blog can be built before any content is committed.
 
 Images are served as static files in production (`next/image` runtime optimization is disabled). There is no Next.js server to start in production; deploy the contents of `out/` to a static host.
 
@@ -85,13 +85,95 @@ Create a **Pages** project in the Cloudflare dashboard using **Connect to Git**,
 | Build environment variable              | `PNPM_VERSION=10.33.4`        |
 | Automatic production branch deployments | Enabled                       |
 
-Apply the build environment variables to production and to previews if enabled. Pages installs dependencies before running the build command. Keystatic authentication variables belong only in the local administrator environment; this static deployment does not need them. A Wrangler deployment configuration and a GitHub Actions deployment workflow are unnecessary for this Git integration.
+Apply the build environment variables to production and to previews if enabled. Pages installs dependencies before running the build command. Keystatic authentication variables belong in the administrator environment; this static deployment does not need them. A Wrangler deployment configuration and a GitHub Actions deployment workflow are unnecessary for this Git integration.
 
 Once connected, a push or merged PR to `main` triggers a Pages build and replaces the production deployment when successful. Configure preview branch deployments separately: disable them if only `main` should build, or enable the branches where you want preview URLs. Keystatic commits to `main` trigger the same production build; edits on another branch must be merged to `main` to publish.
 
 After the first deployment, check the build log and the assigned `*.pages.dev` URL. The homepage should load even before any posts are committed, and `/keystatic` and `/api/keystatic/github/login` should return 404. When you add content later, check that the deployed post and image URLs load after the next successful build.
 
 Reference: [Pages Git integration](https://developers.cloudflare.com/pages/configuration/git-integration/), [Next.js static export deployment](https://developers.cloudflare.com/pages/framework-guides/nextjs/deploy-a-static-nextjs-site/), and [build tool versions](https://developers.cloudflare.com/pages/configuration/build-image/).
+
+## Keystatic administrator on Cloudflare Workers
+
+The blog remains a static Cloudflare Pages deployment. A separate Worker,
+`my-blog-admin`, serves `/keystatic` and `/api/keystatic/*` in GitHub mode.
+Visiting `/` redirects to `/keystatic`. Blog pages are excluded from this build;
+other page URLs return 404. No Next.js `basePath` is used. Local editing and the
+Pages build retain their existing commands.
+
+The administrator uses OpenNext with Node.js compatibility. It does not require
+an R2 cache or Cloudflare Images binding; uploads use the separate image optimizer.
+The adapter requires Next.js 16.3.8 or later. The administrator build uses
+`page.admin.*` routes and the static blog uses `page.blog.tsx` routes.
+Both builds share `.next`; run them sequentially and stop `pnpm dev` before building.
+
+### Build and local Workers preview
+
+Set `NEXT_PUBLIC_KEYSTATIC_GITHUB_APP_SLUG` in `.env.local` (or the existing ignored
+`.env`) before building. This public value is embedded in the browser bundle.
+The storage mode is set to `github` by the build command.
+
+```bash
+pnpm build:admin
+cp .dev.vars.example .dev.vars
+pnpm preview:admin
+```
+
+Fill `.dev.vars` with your Keystatic GitHub client ID, client secret, and
+`KEYSTATIC_SECRET` (at least 32 characters). Set `IMAGE_OPTIMIZER_API_URL` to the
+optimizer URL and its optional `IMAGE_OPTIMIZER_API_KEY`. For OAuth preview, add
+the callback for the exact preview origin shown by Wrangler, for example
+`http://localhost:8787/api/keystatic/github/oauth/callback`. Production Keystatic
+cookies are Secure, so complete login/upload verification on an HTTPS deployment.
+Never commit `.dev.vars` or `.env` credentials.
+
+### Prepare the deployed environment
+
+Use a separate administrator hostname, for example `admin.example.com`.
+In the GitHub App settings, add:
+
+```text
+https://admin.example.com/api/keystatic/github/oauth/callback
+```
+
+Configure these runtime secrets for `my-blog-admin` in the Cloudflare dashboard
+before using the administrator:
+
+- `KEYSTATIC_GITHUB_CLIENT_ID`
+- `KEYSTATIC_GITHUB_CLIENT_SECRET`
+- `KEYSTATIC_SECRET`
+- `IMAGE_OPTIMIZER_API_URL` (the deployed optimizer's HTTPS base URL)
+- `IMAGE_OPTIMIZER_API_KEY` (only if the optimizer requires it)
+
+For Workers Builds, set `NEXT_PUBLIC_KEYSTATIC_GITHUB_APP_SLUG` in the **build**
+environment as well. Use Node.js 22 and pnpm 10.33.4, build command
+`pnpm build:admin`, and deploy command `pnpm exec opennextjs-cloudflare deploy`.
+Keep this separate from the Pages project. Add the custom hostname to the Worker
+in Cloudflare after its first deployment, then use `/keystatic` there.
+For manual deployment from an authenticated local Wrangler session:
+
+```bash
+pnpm deploy:admin
+```
+
+These commands publish the administrator; `pnpm build:admin` only builds locally.
+If renaming the Worker in `wrangler.jsonc`, update the self-reference service name
+at the same time. The committed configuration does not select a Cloudflare account
+or register a custom domain.
+
+The deployed optimization endpoint verifies the Keystatic 0.6 GitHub access-token
+cookie with GitHub and requires write permission on `HyeongjongKIM/my-blog` before
+calling the image optimizer. Local editing keeps its existing behavior. Recheck
+this cookie integration when upgrading Keystatic.
+
+After deployment, verify `/` redirects, `/keystatic` loads, GitHub login works,
+`/posts/example` returns 404, and an anonymous optimization POST is denied.
+Save a post and an image to `main`, confirm the GitHub commit, and confirm Pages
+rebuilds the public blog. Remote OAuth and optimizer integration need the actual
+hostname and credentials; a successful build alone does not verify those flows.
+
+References: [OpenNext setup](https://opennext.js.org/cloudflare/get-started) and
+[Keystatic GitHub mode](https://keystatic.com/docs/github-mode).
 
 ## Development branch publishing
 
@@ -175,7 +257,7 @@ Reference: [workflow_run events](https://docs.github.com/en/actions/reference/wo
 
 ## Validation
 
-Run the same gate locally that CI runs on pushes and pull requests:
+Run the static blog gate locally (CI also builds the administrator Worker):
 
 ```bash
 pnpm check

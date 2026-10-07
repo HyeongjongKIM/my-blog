@@ -1,0 +1,9 @@
+# Copy to .dev.vars for pnpm preview:admin; never commit credentials.
+KEYSTATIC_ADMIN_WORKER=1
+NEXT_PUBLIC_KEYSTATIC_STORAGE=github
+KEYSTATIC_GITHUB_CLIENT_ID=
+KEYSTATIC_GITHUB_CLIENT_SECRET=
+KEYSTATIC_SECRET=
+# Use the deployed optimizer URL. localhost is only for local development.
+IMAGE_OPTIMIZER_API_URL=
+IMAGE_OPTIMIZER_API_KEY=

@@ -1,6 +1,5 @@
 import { makeRouteHandler } from "@keystatic/next/route-handler";
 import keystaticConfig from "../../../../keystatic.config";
-import { reader } from "../../../reader";
 import { resolvePostImageSettings } from "../../../../lib/post-image-settings";
 import {
   optimizePostImageRequest,
@@ -18,6 +17,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const { reader } = await import("../../../reader");
     const settings = resolvePostImageSettings(
       await reader.singletons.siteSettings.read(),
     );
