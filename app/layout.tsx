@@ -9,6 +9,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export async function generateMetadata(): Promise<Metadata> {
+  if (process.env.KEYSTATIC_ADMIN_WORKER === "1")
+    return { title: "Blog Administrator", icons: { icon: "/favicon.ico" } };
   const { favicon } = await getSiteSettings();
   return { icons: { icon: favicon || "/favicon.ico" } };
 }

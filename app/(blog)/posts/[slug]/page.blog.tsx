@@ -16,14 +16,20 @@ const getPost = cache(async (slug: string) => {
 
 export async function generateMetadata({
   params,
-}: PageProps<"/posts/[slug]">): Promise<Metadata> {
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPost(slug);
 
   return { title: post.title };
 }
 
-export default async function Post({ params }: PageProps<"/posts/[slug]">) {
+export default async function Post({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = await params;
   const post = await getPost(slug);
 

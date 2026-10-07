@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-blog-admin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "my-blog-admin" },
+  ],
+  "vars": {
+    "KEYSTATIC_ADMIN_WORKER": "1",
+    "NEXT_PUBLIC_KEYSTATIC_STORAGE": "github",
+  },
+}

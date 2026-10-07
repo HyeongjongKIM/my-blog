@@ -1,285 +1,258 @@
 // @vitest-environment node
-import { describe, expect, it } from "vitest";
-import sharp from "sharp";
-import { randomBytes } from "node:crypto";
-import { resolvePostImageSettings } from "./post-image-settings";
-const MAX_POST_IMAGE_BYTES = resolvePostImageSettings(null).maxBytes;
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   optimizePostImage,
   optimizePostImageRequest,
   PostImageSizeError,
 } from "./optimize-post-images";
 
-describe("post image optimization", () => {
-  it("applies user dimensions and byte limits to image requests", async () => {
-    const image = await sharp({
-      create: { width: 2000, height: 1000, channels: 3, background: "red" },
-    })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-    const request = new Request("http://localhost/api/keystatic/update", {
-      method: "POST",
-      headers: { "content-type": "application/json", "no-cors": "1" },
-      body: JSON.stringify({
-        additions: [
-          {
-            path: "public/images/posts/a.jpg",
-            contents: image.toString("base64url"),
-          },
-        ],
-        deletions: [],
-      }),
-    });
-    const result = await optimizePostImageRequest(request, {
-      maxBytes: 200 * 1024,
-      maxDimension: 800,
-    });
-    const saved = await result.json();
-    const bytes = Buffer.from(saved.additions[0].contents, "base64url");
-    expect(await sharp(bytes).metadata()).toMatchObject({
-      width: 800,
-      height: 400,
-    });
-    expect(bytes.length).toBeLessThanOrEqual(200 * 1024);
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+const path = "public/images/posts/photo.png";
+const source = Buffer.from("source").toString("base64url");
+const settings = { maxBytes: 2048, maxDimension: 800 };
+function mockWorker(type = "image/png", bytes = "optimized") {
+  const worker = vi.fn<typeof fetch>(
+    async () => new Response(bytes, { headers: { "content-type": type } }),
+  );
+  vi.stubGlobal("fetch", worker);
+  return worker;
+}
+
+describe("Worker image adapter", () => {
+  it("maps settings to multipart without PNG quality and preserves the filename", async () => {
+    const worker = mockWorker();
+    vi.stubEnv("IMAGE_OPTIMIZER_API_URL", "http://localhost:8787/");
+    vi.stubEnv("IMAGE_OPTIMIZER_API_KEY", "worker-token");
+    expect(await optimizePostImage(path, source, settings)).toBe(
+      Buffer.from("optimized").toString("base64url"),
+    );
+    const [url, init] = worker.mock.calls[0];
+    expect(String(url)).toBe("http://localhost:8787/v1/optimize");
+    expect(new Headers(init?.headers).get("authorization")).toBe(
+      "Bearer worker-token",
+    );
+    const form = init!.body as FormData;
+    expect(form.get("width")).toBe("800");
+    expect(form.get("height")).toBe("800");
+    expect(form.get("maxBytes")).toBe("2048");
+    expect(form.get("format")).toBe("original");
+    expect(form.has("quality")).toBe(false);
+    expect((form.get("image") as File).name).toBe("photo.png");
+  });
+  it("sets lossy quality and fixed favicon limits", async () => {
+    const worker = mockWorker("image/jpeg");
+    await optimizePostImage("public/images/site/favicon.jpg", source, settings);
+    const form = worker.mock.calls[0][1]!.body as FormData;
+    expect(form.get("quality")).toBe("82");
+    expect(form.get("minQuality")).toBe("62");
+    expect(form.get("width")).toBe("64");
+    expect(form.get("maxBytes")).toBe("102400");
+  });
+  it("preserves unsupported formats within the limit and skips unrelated paths", async () => {
+    const worker = mockWorker();
+    for (const file of [
+      "public/images/posts/a.svg",
+      "public/images/posts/a.gif",
+      "public/images/site/a.ico",
+      "public/images/posts/../a.png",
+      "post.mdoc",
+    ]) {
+      expect(await optimizePostImage(file, source, settings)).toBe(source);
+    }
+    expect(worker).not.toHaveBeenCalled();
     await expect(
       optimizePostImage(
         "public/images/posts/a.svg",
-        Buffer.alloc(2049).toString("base64url"),
-        { maxBytes: 2048, maxDimension: 800 },
+        Buffer.alloc(3000).toString("base64url"),
+        settings,
       ),
-    ).rejects.toThrow("2 KiB");
+    ).rejects.toBeInstanceOf(PostImageSizeError);
   });
-  it("reduces a detailed PNG below the byte limit by resizing", async () => {
-    const original = await sharp(randomBytes(1600 * 1600), {
-      raw: { width: 1600, height: 1600, channels: 1 },
-    })
-      .png()
-      .toBuffer();
-    expect(original.length).toBeGreaterThan(MAX_POST_IMAGE_BYTES);
-    const result = Buffer.from(
-      await optimizePostImage(
-        "public/images/posts/noise.png",
-        original.toString("base64url"),
+  it("preserves animation only when the Worker explicitly rejects animation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { error: { code: "UNSUPPORTED_ANIMATION" } },
+          { status: 415 },
+        ),
       ),
-      "base64url",
     );
-    expect(result.length).toBeLessThanOrEqual(MAX_POST_IMAGE_BYTES);
-    expect((await sharp(result).metadata()).width).toBeLessThan(1600);
+    expect(await optimizePostImage(path, source, settings)).toBe(source);
   });
-
-  it("rejects oversized images that cannot be optimized", async () => {
-    const contents = Buffer.alloc(MAX_POST_IMAGE_BYTES + 1).toString(
-      "base64url",
-    );
-    for (const path of [
-      "public/images/posts/a.jpg",
-      "public/images/posts/a.gif",
-      "public/images/posts/a.svg",
-    ]) {
-      await expect(optimizePostImage(path, contents)).rejects.toBeInstanceOf(
-        PostImageSizeError,
-      );
-    }
-  });
-
-  it("keeps already small WebP bytes when encoding would make them larger", async () => {
-    const image = await sharp({
-      create: { width: 3000, height: 1500, channels: 3, background: "red" },
-    })
-      .webp({ lossless: true })
-      .toBuffer();
-    const contents = image.toString("base64url");
-    expect(
-      await optimizePostImage("public/images/posts/a.webp", contents),
-    ).toBe(contents);
-  });
-  it("reduces large uploads while preserving format and aspect ratio", async () => {
-    const original = await sharp({
-      create: { width: 3000, height: 1500, channels: 3, background: "red" },
-    })
-      .jpeg({ quality: 100 })
-      .toBuffer();
-    const result = Buffer.from(
-      await optimizePostImage(
-        "public/images/posts/post/photo.jpg",
-        original.toString("base64url"),
+  it("stops saves for API failures, outages, wrong formats, and oversized results", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: { code: "OUTPUT_TOO_LARGE" } }, { status: 422 }),
       ),
-      "base64url",
     );
-    expect(result.length).toBeLessThan(original.length);
-    expect(await sharp(result).metadata()).toMatchObject({
-      format: "jpeg",
-      width: 1920,
-      height: 960,
-    });
-  });
-
-  it("preserves PNG transparency and does not enlarge small images", async () => {
-    const original = await sharp({
-      create: {
-        width: 32,
-        height: 16,
-        channels: 4,
-        background: { r: 255, g: 0, b: 0, alpha: 0.5 },
-      },
-    })
-      .png()
-      .toBuffer();
-    const result = Buffer.from(
-      await optimizePostImage(
-        "public/images/posts/a.png",
-        original.toString("base64url"),
-      ),
-      "base64url",
+    await expect(
+      optimizePostImage(path, source, settings),
+    ).rejects.toBeInstanceOf(PostImageSizeError);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("failure", { status: 401 })),
     );
-    expect(result.length).toBeLessThanOrEqual(original.length);
-    expect(await sharp(result).metadata()).toMatchObject({
-      width: 32,
-      height: 16,
-      hasAlpha: true,
-      format: "png",
-    });
+    await expect(optimizePostImage(path, source, settings)).rejects.toThrow(
+      "failed (401)",
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    await expect(optimizePostImage(path, source, settings)).rejects.toThrow(
+      "unavailable",
+    );
+    mockWorker("image/webp");
+    await expect(optimizePostImage(path, source, settings)).rejects.toThrow(
+      "unexpected format",
+    );
+    mockWorker("image/png", "x".repeat(3000));
+    await expect(
+      optimizePostImage(path, source, settings),
+    ).rejects.toBeInstanceOf(PostImageSizeError);
   });
-
-  it("preserves non-post files, unsupported formats, and invalid images", async () => {
-    for (const path of [
-      "src/content/posts/a.mdoc",
-      "public/images/posts/a.gif",
-      "public/images/posts/a.svg",
-      "public/images/posts/../a.jpg",
-      "public/images/posts/a.jpg",
-    ]) {
-      expect(await optimizePostImage(path, "invalid")).toBe("invalid");
-    }
-  });
-
-  it("transforms only image additions and preserves deletions and request headers", async () => {
-    const image = await sharp({
-      create: { width: 3000, height: 1500, channels: 3, background: "red" },
-    })
-      .jpeg({ quality: 100 })
-      .toBuffer();
+  it("replaces only image additions and preserves deletions and headers in local updates", async () => {
+    mockWorker();
     const body = {
       additions: [
-        {
-          path: "public/images/posts/a.jpg",
-          contents: image.toString("base64url"),
-        },
-        { path: "src/content/posts/a.mdoc", contents: "text" },
+        { path, contents: source },
+        { path: "post.mdoc", contents: source },
       ],
-      deletions: [{ path: "public/images/posts/old.webp" }],
+      deletions: [{ path: "old.png" }],
     };
     const request = new Request("http://localhost/api/keystatic/update", {
       method: "POST",
       headers: {
-        "content-type": "application/json",
         "no-cors": "1",
-        cookie: "test=1",
+        "content-type": "application/json",
+        "x-test": "keep",
       },
       body: JSON.stringify(body),
     });
-    const result = await optimizePostImageRequest(request);
-    const saved = await result.json();
-    expect(saved.deletions).toEqual(body.deletions);
-    expect(saved.additions[1]).toEqual(body.additions[1]);
-    expect(
-      await sharp(
-        Buffer.from(saved.additions[0].contents, "base64url"),
-      ).metadata(),
-    ).toMatchObject({ format: "jpeg", width: 1920 });
-    expect(result.headers.get("cookie")).toBe("test=1");
-  });
-
-  it("leaves malformed requests for Keystatic to validate", async () => {
-    const request = new Request("http://localhost/api/keystatic/update", {
-      method: "POST",
-      headers: { "content-type": "application/json", "no-cors": "1" },
-      body: "{",
+    const result = await optimizePostImageRequest(request, settings);
+    expect(result.headers.get("x-test")).toBe("keep");
+    expect(await result.json()).toEqual({
+      ...body,
+      additions: [
+        { path, contents: Buffer.from("optimized").toString("base64url") },
+        body.additions[1],
+      ],
     });
-    expect(await optimizePostImageRequest(request)).toBe(request);
-    expect(await request.text()).toBe("{");
+    const other = new Request("http://localhost/api/keystatic/read");
+    expect(await optimizePostImageRequest(other)).toBe(other);
   });
 });
 
-describe("favicon optimization", () => {
-  it("resizes even when the original encoding is smaller and preserves transparency", async () => {
-    const image = await sharp({
-      create: {
-        width: 2048,
-        height: 1024,
-        channels: 4,
-        background: { r: 255, g: 0, b: 0, alpha: 0.5 },
-      },
-    })
-      .webp({ lossless: true })
-      .toBuffer();
-    const request = new Request("http://localhost/api/keystatic/update", {
-      method: "POST",
-      headers: { "content-type": "application/json", "no-cors": "1" },
-      body: JSON.stringify({
-        additions: [
-          {
-            path: "public/images/site/favicon.webp",
-            contents: image.toString("base64url"),
-          },
-        ],
-      }),
-    });
-    const saved = await (
-      await optimizePostImageRequest(request, {
-        maxBytes: 1,
-        maxDimension: 800,
-      })
-    ).json();
-    const bytes = Buffer.from(saved.additions[0].contents, "base64url");
-    expect(await sharp(bytes).metadata()).toMatchObject({
-      format: "webp",
-      width: 64,
-      height: 32,
-      hasAlpha: true,
-    });
-    expect(bytes.length).toBeLessThanOrEqual(100 * 1024);
-  });
-
-  it("compresses raster formats without enlarging small icons", async () => {
-    for (const format of ["png", "jpeg", "webp"] as const) {
-      const image = await sharp({
-        create: { width: 32, height: 16, channels: 3, background: "red" },
-      })
-        .toFormat(format)
-        .toBuffer();
-      const bytes = Buffer.from(
-        await optimizePostImage(
-          `public/images/site/favicon.${format}`,
-          image.toString("base64url"),
-        ),
-        "base64url",
-      );
-      expect(await sharp(bytes).metadata()).toMatchObject({
-        format,
-        width: 32,
-        height: 16,
+describe("local asset replacement", () => {
+  it("keeps favicon settings aligned with the on-disk filename after case-only replacement", async () => {
+    mockWorker();
+    await mkdir("public/images/site", { recursive: true });
+    const directory = await mkdtemp("public/images/site/replacement-test-");
+    try {
+      const originalPath = `${directory}/favicon.png`;
+      const replacementPath = `${directory}/favicon.PNG`;
+      await writeFile(originalPath, "original");
+      const sameFile =
+        (await realpath(replacementPath).catch(() => null)) ===
+        (await realpath(originalPath));
+      const settingsFile = {
+        path: "src/content/site-settings.json",
+        contents: Buffer.from(
+          JSON.stringify({
+            title: "Keep title",
+            favicon: replacementPath.slice(6),
+          }),
+        ).toString("base64url"),
+      };
+      const request = new Request("http://localhost/api/keystatic/update", {
+        method: "POST",
+        headers: { "no-cors": "1", "content-type": "application/json" },
+        body: JSON.stringify({
+          additions: [
+            settingsFile,
+            { path: replacementPath, contents: source },
+          ],
+          deletions: [{ path: originalPath }],
+        }),
       });
-      expect(bytes.length).toBeLessThanOrEqual(image.length);
+      const result = await optimizePostImageRequest(request);
+      const updates = await result.json();
+      const saved = JSON.parse(
+        Buffer.from(updates.additions[0].contents, "base64url").toString(),
+      );
+      expect(saved).toEqual({
+        title: "Keep title",
+        favicon: (sameFile ? originalPath : replacementPath).slice(6),
+      });
+      expect(updates.additions[1].path).toBe(
+        sameFile ? originalPath : replacementPath,
+      );
+      expect(updates.deletions).toEqual(
+        sameFile ? [] : [{ path: originalPath }],
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
-
-  it("preserves SVG and enforces the favicon byte limit", async () => {
-    const svg = Buffer.from(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="red"/></svg>',
-    ).toString("base64url");
-    expect(await optimizePostImage("public/images/site/favicon.svg", svg)).toBe(
-      svg,
-    );
-    await expect(
-      optimizePostImage(
-        "public/images/site/favicon.svg",
-        Buffer.alloc(100 * 1024 + 1).toString("base64url"),
-      ),
-    ).rejects.toThrow("100 KiB");
-    const contents = Buffer.alloc(100 * 1024 + 1).toString("base64url");
-    expect(
-      await optimizePostImage("public/images/site/../favicon.png", contents),
-    ).toBe(contents);
+  it("does not delete the replacement when differently cased paths resolve to the same file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "keystatic-replacement-"));
+    try {
+      const originalPath = join(directory, "favicon.png");
+      const replacementPath = join(directory, "favicon.PNG");
+      const unrelatedPath = join(directory, "old.svg");
+      await writeFile(originalPath, "old");
+      await writeFile(unrelatedPath, "old icon");
+      const sameFile =
+        (await realpath(replacementPath).catch(() => null)) ===
+        (await realpath(originalPath));
+      const request = new Request("http://localhost/api/keystatic/update", {
+        method: "POST",
+        headers: { "no-cors": "1", "content-type": "application/json" },
+        body: JSON.stringify({
+          additions: [
+            {
+              path: replacementPath,
+              contents: Buffer.from("new").toString("base64url"),
+            },
+          ],
+          deletions: [{ path: originalPath }, { path: unrelatedPath }],
+        }),
+      });
+      const result = await optimizePostImageRequest(request);
+      const updates = await result.json();
+      expect(updates.deletions).toEqual(
+        sameFile
+          ? [{ path: unrelatedPath }]
+          : [{ path: originalPath }, { path: unrelatedPath }],
+      );
+      // Reproduce the installed Keystatic handler's write-then-delete ordering.
+      for (const addition of updates.additions)
+        await writeFile(
+          addition.path,
+          Buffer.from(addition.contents, "base64url"),
+        );
+      for (const deletion of updates.deletions)
+        await rm(deletion.path, { force: true });
+      expect(await readFile(replacementPath, "utf8")).toBe("new");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

@@ -1,16 +1,21 @@
 import {
   optimizePostImage,
   PostImageSizeError,
+  ImageOptimizerError,
 } from "@/lib/optimize-post-images";
 
+import { authorizeAdminImageRequest } from "@/lib/admin-authorization";
+
 export async function POST(request: Request) {
-  // Only the local administrator calls this API; it never writes files or commits.
+  // Both local and deployed administrators call this API.
   if (request.headers.get("origin") !== new URL(request.url).origin) {
     return new Response("Invalid origin", { status: 403 });
   }
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return new Response("Expected JSON", { status: 415 });
   }
+  const denied = await authorizeAdminImageRequest(request);
+  if (denied) return denied;
   let body;
   try {
     body = await request.json();
@@ -49,6 +54,8 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof PostImageSizeError)
       return new Response(error.message, { status: 413 });
+    if (error instanceof ImageOptimizerError)
+      return new Response(error.message, { status: error.status });
     throw error;
   }
 }
