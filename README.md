@@ -177,11 +177,11 @@ References: [OpenNext setup](https://opennext.js.org/cloudflare/get-started) and
 
 ## Development branch publishing
 
-Keep `main` for production and Keystatic content, and `dev` for development. Push development commits to `dev`. After the existing **CI** workflow passes `pnpm check` for the latest `dev` push, **Publish dev** creates a `dev → main` PR (or reuses an open PR) and requests merge commit auto-merge. Failed checks, stale CI runs, and pushes without new changes do not publish. No squash, rebase, or branch deletion is requested. Once the merge reaches `main`, Cloudflare Pages builds production.
+Keep `main` for production and Keystatic content, and `dev` for development. Push development commits to `dev`. After the existing **CI** workflow passes `pnpm check` and the administrator build for the latest `dev` push, **Publish dev** creates a `dev → main` PR (or reuses an open PR). This phase does not request a merge. Approve the PR workflow if GitHub requests approval. Once that PR's **CI** succeeds, **Publish dev** runs again and requests merge commit auto-merge for the tested head commit. Failed checks, stale runs, and pushes without new changes do not publish. No squash, rebase, or branch deletion is requested. Once the merge reaches `main`, Cloudflare Pages builds production.
 
 For initial setup, manually merge the workflow file into the default branch (`main`); GitHub only runs `workflow_run` listeners present on the default branch. Subsequent `dev` pushes use the automation. Repository settings must allow GitHub Actions to create pull requests, merge commits, and auto-merge. Keep **Automatically delete head branches** disabled. The workflow uses the built-in `GITHUB_TOKEN`; no personal access token is needed.
 
-Configure required status checks on `main` if you want auto-merge to wait for additional checks. Without blocking requirements, the merge command may merge immediately after the successful `dev` CI run. PR checks created by `GITHUB_TOKEN` can require workflow approval, so approve them if GitHub shows that requirement. Conflicts or required reviews can also prevent automatic merging. A rule requiring every `main` change to use a PR must allow the Keystatic GitHub App to bypass it so direct content saves still work.
+Configure required status checks on `main` if you want auto-merge to wait for additional checks. Without blocking requirements, the merge command may merge immediately after the successful PR CI run. PR checks created by `GITHUB_TOKEN` can require workflow approval, so approve them if GitHub shows that requirement. Conflicts or required reviews can also prevent automatic merging. A rule requiring every `main` change to use a PR must allow the Keystatic GitHub App to bypass it so direct content saves still work.
 
 ### Branch roles
 
@@ -224,7 +224,7 @@ git push origin dev
 
 For the first push of a new `dev` branch, use `git push -u origin dev` to set its upstream. Each successful development push with file changes is a release candidate; only push changes you are ready to publish.
 
-Check GitHub **Actions** for **CI**, then **Publish dev**, and the resulting `dev → main` PR. The workflow reuses an open PR and requests **Create a merge commit** auto-merge. If GitHub requirements block the merge, resolve the failed checks, required workflow approvals, reviews, or conflicts. After merging, confirm the Cloudflare Pages production build succeeds.
+Check GitHub **Actions** for **CI**, then **Publish dev**, and the resulting `dev → main` PR. The push phase reuses an open PR; the successful PR CI phase requests **Create a merge commit** auto-merge. If GitHub requirements block the merge, resolve the failed checks, required workflow approvals, reviews, or conflicts. After merging, confirm the Cloudflare Pages production build succeeds.
 
 ### Synchronize after merging
 
