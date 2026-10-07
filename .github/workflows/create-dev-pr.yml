@@ -18,16 +18,21 @@ jobs:
   publish:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
+      (github.event.workflow_run.event == 'push' ||
+       (github.event.workflow_run.event == 'pull_request' &&
+        github.event.workflow_run.pull_requests[0].base.ref == 'main' &&
+        github.event.workflow_run.pull_requests[0].head.ref == 'dev')) &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+      CI_EVENT: ${{ github.event.workflow_run.event }}
+      CI_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+      TESTED_SHA: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].head.sha || github.event.workflow_run.head_sha }}
     steps:
       # No checkout: this privileged job runs no code or artifacts from dev.
-      - name: Create PR and enable merge commit auto-merge
+      - name: Create PR after push CI or publish after PR CI
         shell: bash
         run: |
           set -euo pipefail
@@ -35,6 +40,30 @@ jobs:
           latest_sha=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq '.object.sha')
           if [[ "$latest_sha" != "$TESTED_SHA" ]]; then
             echo "Skipping an older CI run; dev has newer commits."
+            exit 0
+          fi
+
+          if [[ "$CI_EVENT" == "pull_request" ]]; then
+            pr_number="$CI_PR_NUMBER"
+            pr_json=$(gh pr view "$pr_number" --repo "$GH_REPO" \
+              --json state,baseRefName,headRefName,headRefOid,isCrossRepository,mergeStateStatus)
+            if ! jq -e --arg sha "$TESTED_SHA" '
+              .state == "OPEN" and .baseRefName == "main" and .headRefName == "dev" and
+              .headRefOid == $sha and .isCrossRepository == false
+            ' <<< "$pr_json" >/dev/null; then
+              echo "Skipping a closed, changed, or unrelated PR."
+              exit 0
+            fi
+            merge_state=$(jq -r .mergeStateStatus <<< "$pr_json")
+            echo "PR CI passed; current merge state: $merge_state"
+            if [[ "$merge_state" == "UNSTABLE" || "$merge_state" == "UNKNOWN" ]]; then
+              echo "Other commit statuses have not passed, or GitHub cannot determine merge state." >&2
+              gh pr checks "$pr_number" --repo "$GH_REPO" || true
+              echo "Resolve pending or failing checks, then rerun this PR CI completion job." >&2
+              exit 1
+            fi
+            gh pr merge "$pr_number" --repo "$GH_REPO" \
+              --auto --merge --match-head-commit "$TESTED_SHA"
             exit 0
           fi
 
@@ -58,7 +87,7 @@ jobs:
             cat > "$body_file" <<'BODY'
           Publish development changes from dev to main.
 
-          The dev push passed CI (pnpm check). This PR uses merge commit auto-merge and waits for any additional repository requirements. Keep the dev branch after merging.
+          The dev push passed CI (pnpm check and the administrator build). After PR CI succeeds, Publish dev requests merge commit auto-merge and honors additional repository requirements. Approve the PR workflow if GitHub requests it. Keep the dev branch after merging.
           BODY
             gh pr create --repo "$GH_REPO" --base main --head dev \
               --title "chore: merge dev into main" --body-file "$body_file"
@@ -67,5 +96,5 @@ jobs:
               --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           fi
 
-          gh pr merge "$pr_number" --repo "$GH_REPO" \
-            --auto --merge --match-head-commit "$TESTED_SHA"
+          echo "PR #$pr_number is ready for PR CI. Approve its workflow if GitHub requires approval."
+          echo "Publish dev will continue automatically after successful pull_request CI."
