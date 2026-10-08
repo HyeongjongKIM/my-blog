@@ -40,9 +40,15 @@ describe("GitHub image optimization", () => {
     const image = Buffer.from("source image");
     const worker = vi.fn<typeof fetch>(async (_input, init) => {
       const form = init!.body as FormData;
-      return new Response(`optimized-${form.get("width")}`, {
-        headers: { "content-type": "image/png" },
-      });
+      return new Response(
+        Buffer.concat([
+          Buffer.from([0xff, 0xef, 0xfe]),
+          Buffer.from(`optimized-${form.get("width")}`),
+        ]),
+        {
+          headers: { "content-type": "image/png" },
+        },
+      );
     });
     vi.stubGlobal("fetch", worker);
     const body = mutation([
@@ -110,12 +116,15 @@ describe("GitHub image optimization", () => {
     );
     const additions = committed!.variables.input.fileChanges.additions;
     expect(additions[2]).toEqual(body.variables.input.fileChanges.additions[2]);
-    expect(Buffer.from(additions[0].contents, "base64url").toString()).toBe(
-      "optimized-800",
-    );
-    expect(Buffer.from(additions[1].contents, "base64url").toString()).toBe(
-      "optimized-64",
-    );
+    for (const [index, width] of [800, 64].entries()) {
+      const expected = Buffer.concat([
+        Buffer.from([0xff, 0xef, 0xfe]),
+        Buffer.from(`optimized-${width}`),
+      ]);
+      expect(additions[index].contents).toBe(expected.toString("base64"));
+      expect(additions[index].contents).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
+      expect(additions[index].contents.length % 4).toBe(0);
+    }
     expect(worker).toHaveBeenCalledTimes(2);
     for (const [, init] of worker.mock.calls) {
       expect(new Headers(init?.headers).get("authorization")).not.toBe(
