@@ -43,11 +43,12 @@ export async function POST(request: Request) {
     for (const addition of additions) {
       optimized.push({
         path: addition.path,
-        contents: await optimizePostImage(
-          addition.path,
-          addition.contents,
-          settings,
-        ),
+        // Local Keystatic updates use base64url; GitHub requires padded,
+        // standard Base64 for FileAddition.contents.
+        contents: Buffer.from(
+          await optimizePostImage(addition.path, addition.contents, settings),
+          "base64url",
+        ).toString("base64"),
       });
     }
     return Response.json({ additions: optimized });
