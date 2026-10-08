@@ -7,8 +7,7 @@ on:
     branches: [dev]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: publish-dev
@@ -23,13 +22,25 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       CI_EVENT: ${{ github.event.workflow_run.event }}
       TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       # No checkout: this privileged job runs no code or artifacts from dev.
+      - name: Create publishing token
+        id: publishing-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.PUBLISH_APP_ID }}
+          private-key: ${{ secrets.PUBLISH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: my-blog
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Create PR after push CI or publish after PR CI
+        env:
+          GH_TOKEN: ${{ steps.publishing-token.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -103,7 +114,7 @@ jobs:
             cat > "$body_file" <<'BODY'
           Publish development changes from dev to main.
 
-          The dev push passed CI (pnpm check and the administrator build). After PR CI succeeds, Publish dev requests merge commit auto-merge and honors additional repository requirements. Approve the PR workflow if GitHub requests it. Keep the dev branch after merging.
+          The dev push passed CI (pnpm check and the administrator build). After PR CI succeeds, Publish dev requests merge commit auto-merge and honors additional repository requirements. Keep the dev branch after merging.
           BODY
             gh pr create --repo "$GH_REPO" --base main --head dev \
               --title "chore: merge dev into main" --body-file "$body_file"
@@ -112,5 +123,5 @@ jobs:
               --jq '[.[] | select(.isCrossRepository == false)][0].number // empty')
           fi
 
-          echo "PR #$pr_number is ready for PR CI. Approve its workflow if GitHub requires approval."
+          echo "PR #$pr_number is ready for PR CI."
           echo "Publish dev will continue automatically after successful pull_request CI."
