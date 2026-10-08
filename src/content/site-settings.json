@@ -2,6 +2,7 @@
   "title": "Kims Blog",
   "tagline": "Thoughts, notes, and stories.",
   "metaDescription": "A personal blog for thoughts, notes, and stories.",
+  "favicon": "/images/site/favicon.jpg",
   "imageMaxSizeKiB": 500,
   "imageMaxDimension": 1920
 }
