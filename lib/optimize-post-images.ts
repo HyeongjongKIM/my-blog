@@ -59,18 +59,11 @@ export async function optimizePostImage(
     form.set("minQuality", "62");
   }
   let response: Response;
-  let diagnosticUrl: string | null = null;
   try {
     const url = new URL(
       "/v1/optimize",
       process.env.IMAGE_OPTIMIZER_API_URL || "http://localhost:8787",
     );
-    // Log only the endpoint, never URL credentials, headers, or image data.
-    diagnosticUrl = `${url.origin}${url.pathname}`;
-    console.info("Image optimizer request", {
-      method: "POST",
-      url: diagnosticUrl,
-    });
     response = await fetch(url, {
       method: "POST",
       body: form,
@@ -80,20 +73,11 @@ export async function optimizePostImage(
       signal: AbortSignal.timeout(30_000),
       cache: "no-store",
     });
-  } catch (error) {
-    console.error("Image optimizer connection failed", {
-      url: diagnosticUrl,
-      errorType: error instanceof Error ? error.name : "UnknownError",
-    });
+  } catch {
     throw new ImageOptimizerError(
       "Image optimizer is unavailable or timed out. Save was stopped.",
     );
   }
-  console.info("Image optimizer response", {
-    url: diagnosticUrl,
-    status: response.status,
-    rayId: response.headers.get("cf-ray"),
-  });
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     if (body?.error?.code === "UNSUPPORTED_ANIMATION")

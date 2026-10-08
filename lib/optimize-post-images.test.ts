@@ -33,60 +33,6 @@ function mockWorker(type = "image/png", bytes = "optimized") {
 }
 
 describe("Worker image adapter", () => {
-  it("logs endpoint, upstream status, and Ray ID without credentials or images", async () => {
-    const log = vi.spyOn(console, "info").mockImplementation(() => {});
-    vi.stubEnv(
-      "IMAGE_OPTIMIZER_API_URL",
-      "https://user:password@optimizer.test/?token=hidden",
-    );
-    vi.stubEnv("IMAGE_OPTIMIZER_API_KEY", "private-key");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response("not found", {
-            status: 404,
-            headers: { "cf-ray": "example-ray-NRT" },
-          }),
-      ),
-    );
-    await expect(optimizePostImage(path, source, settings)).rejects.toThrow(
-      "failed (404)",
-    );
-    expect(log.mock.calls).toEqual([
-      [
-        "Image optimizer request",
-        { method: "POST", url: "https://optimizer.test/v1/optimize" },
-      ],
-      [
-        "Image optimizer response",
-        {
-          url: "https://optimizer.test/v1/optimize",
-          status: 404,
-          rayId: "example-ray-NRT",
-        },
-      ],
-    ]);
-  });
-  it("logs connection error type without leaking the error message", async () => {
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.stubEnv("IMAGE_OPTIMIZER_API_URL", "https://optimizer.test");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new TypeError("private-key");
-      }),
-    );
-    await expect(optimizePostImage(path, source, settings)).rejects.toThrow(
-      "unavailable",
-    );
-    expect(log).toHaveBeenCalledWith("Image optimizer connection failed", {
-      url: "https://optimizer.test/v1/optimize",
-      errorType: "TypeError",
-    });
-  });
-
   it("maps settings to multipart without PNG quality and preserves the filename", async () => {
     const worker = mockWorker();
     vi.stubEnv("IMAGE_OPTIMIZER_API_URL", "http://localhost:8787/");
